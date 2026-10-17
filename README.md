@@ -38,7 +38,7 @@
 | --- | --- | --- |
 | 地図・陣取り表示 | MapLibre GL JS | 決定 |
 | 認証・データ保存 | Supabase（Auth / Database） | 決定 |
-| フロントエンド | **未決定**（Issue #TBD で議論） | 未決定 |
+| フロントエンド | **未決定**（#5 で議論） | 未決定 |
 | ホスティング | **未決定** | 未決定 |
 
 ### 飛行ログの扱い
@@ -50,7 +50,7 @@ GPX     → GPX Parser → FlightRecord ┐
 DJI Log → DJI Parser → FlightRecord ┴→ ポイント計算 → 陣取り
 ```
 
-`FlightRecord` の具体的な項目は **未決定** です（Issue #TBD）。決定後に `docs/flight-record.md` へまとめます。
+`FlightRecord` の具体的な項目は **未決定** です（#6）。決定後に `docs/flight-record.md` へまとめます。
 
 ## リポジトリ構成
 
