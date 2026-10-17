@@ -1,0 +1,11 @@
+# 秘密情報
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+
+# 依存関係・ビルド成果物（技術スタック決定後に追記）
+node_modules/
+dist/
