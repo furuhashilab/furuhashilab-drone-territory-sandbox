@@ -60,6 +60,7 @@ drone-territory/
 ├── CONTRIBUTING.md      # 開発ルール（Issue / Branch / PR）
 ├── .github/             # Issue・PRテンプレート
 ├── docs/                # 仕様・設計メモ・引き継ぎ資料
+├── poc/                 # 試作品（PoC）。本体とは別に置く
 ├── src/                 # アプリのソースコード
 ├── public/              # 静的ファイル
 └── supabase/            # Supabase の設定・マイグレーション
@@ -127,7 +128,20 @@ Issue → Branch → 開発 → Commit → Push → Pull Request → Review → 
 
 ## 実装済み機能
 
-まだありません。
+本体はまだありません。
+
+## 試作品（PoC）
+
+`poc/` には、仕様を検討するための試作品を置いています。**ルール・レイアウトはすべて仮**で、決定事項ではありません。
+
+| PoC | 内容 | 公開ページ | Issue |
+| --- | --- | --- | --- |
+| [`poc/maplibre-game/`](poc/maplibre-game/) | MapLibre 上の B棟9階で遊ぶ陣取りゲーム（Tomoya 版） | GitHub Pages 設定後に追記 | #9 |
+
+手元で開く場合は、`poc/maplibre-game/index.html` をブラウザで開いてください（地図の表示にインターネット接続が必要です）。
+
+- 地図：[OpenFreeMap](https://openfreemap.org/)、航空写真：[国土地理院](https://maps.gsi.go.jp/development/ichiran.html)、B棟の外形：© [OpenStreetMap contributors](https://www.openstreetmap.org/copyright)
+- 仮ルールの数値は `index.html` 先頭の `RULES` にまとめています（ルールの議論は #4）
 
 ## 未実装機能
 
