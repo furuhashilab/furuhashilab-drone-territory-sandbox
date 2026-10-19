@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Drone Territory PoC 比較</title>
+<style>
+  /* Layout: 上に説明と切り替え → 2つの PoC を並べて表示（狭い画面では1つずつ）→ 違いの表 */
+  :root {
+    --team-a: #378ADD;
+    --team-b: #D85A30;
+    --bg: #f5f4f0;
+    --surface: #ffffff;
+    --text: #2c2c2a;
+    --text-sub: #5f5e5a;
+    --border: rgba(100,100,100,0.25);
+    --note: #fbf3d5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1a1a18; --surface: #252523; --text: #e8e7e2; --text-sub: #a3a29b;
+      --border: rgba(200,200,200,0.18); --note: #3a3424;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1a1a18; --surface: #252523; --text: #e8e7e2; --text-sub: #a3a29b;
+    --border: rgba(200,200,200,0.18); --note: #3a3424;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  [hidden] { display: none !important; }
+  body {
+    background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; line-height: 1.6;
+    padding-block: 20px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  main { max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+  h1 { font-size: 22px; text-wrap: balance; }
+  h2 { font-size: 16px; }
+  .lead { color: var(--text-sub); font-size: 14px; max-width: 65ch; }
+  .note { background: var(--note); border-radius: 10px; padding: 10px 14px; font-size: 13px; max-width: 80ch; }
+  a { color: var(--team-a); }
+
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .btn {
+    min-height: 36px; padding: 0 14px; border-radius: 18px; border: 1.5px solid var(--border);
+    background: transparent; color: var(--text); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+    text-decoration: none; display: inline-flex; align-items: center;
+  }
+  .btn.active { background: var(--text); color: var(--surface); border-color: var(--text); }
+  .btn:focus-visible { outline: 2px solid var(--team-a); outline-offset: 2px; }
+
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .compare.single { grid-template-columns: 1fr; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
+  .panel-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .panel-head h2 { flex: 1; min-width: 0; }
+  .panel-head small { display: block; font-size: 12px; font-weight: 400; color: var(--text-sub); }
+  iframe { width: 100%; height: max(520px, calc(100vh - 260px)); border: 0; display: block; background: var(--bg); }
+
+  .table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+  table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 13px; }
+  th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  thead th { font-size: 12px; color: var(--text-sub); font-weight: 600; letter-spacing: 0.04em; }
+  tbody th { white-space: nowrap; font-weight: 600; }
+  tr:last-child th, tr:last-child td { border-bottom: 0; }
+
+  @media (max-width: 900px) {
+    .compare { grid-template-columns: 1fr; }
+    #mode-side { display: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header style="display:flex;flex-direction:column;gap:8px">
+    <h1>Drone Territory PoC 比較</h1>
+    <p class="lead">盤面の違う2つの試作品を並べて触り、ゲームの盤面をどうするかを議論するためのページです。意見は Issue #12 にコメントしてください。</p>
+    <p class="note">どちらも <b>試作品（PoC）</b> です。ルールの数値・部屋の配置・ポータルの位置はすべて仮で、決定事項ではありません。</p>
+  </header>
+
+  <div class="bar" role="group" aria-label="表示の切り替え">
+    <button class="btn active" id="mode-side" onclick="setMode('side')">並べて表示</button>
+    <button class="btn" id="mode-a" onclick="setMode('a')">B棟9階版だけ</button>
+    <button class="btn" id="mode-b" onclick="setMode('b')">キャンパス版だけ</button>
+    <a class="btn" href="https://github.com/furuhashilab/furuhashilab-drone-territory-sandbox/issues/12" target="_blank" rel="noopener">議論する（#12）</a>
+  </div>
+
+  <div class="compare" id="compare">
+    <section class="panel" id="panel-a">
+      <div class="panel-head">
+        <h2>B棟9階版<small>研究室フロアを盤面にした陣取り（#9）</small></h2>
+        <a class="btn" href="./maplibre-game/" target="_blank" rel="noopener">新しいタブで開く</a>
+      </div>
+      <iframe src="./maplibre-game/" title="B棟9階版 PoC" loading="lazy"></iframe>
+    </section>
+    <section class="panel" id="panel-b">
+      <div class="panel-head">
+        <h2>キャンパス版（Ingress 風）<small>建物をポータルにした陣取り（#13）</small></h2>
+        <a class="btn" href="./ingress-campus/" target="_blank" rel="noopener">新しいタブで開く</a>
+      </div>
+      <iframe src="./ingress-campus/" title="キャンパス版 PoC" loading="lazy"></iframe>
+    </section>
+  </div>
+
+  <section style="display:flex;flex-direction:column;gap:10px">
+    <h2>違いのまとめ</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">観点</th><th scope="col">B棟9階版</th><th scope="col">キャンパス版（Ingress 風）</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">盤面</th><td>B棟9階の仮レイアウト（9部屋、約35m × 23m）</td><td>相模原キャンパス全体（約600m 四方）</td></tr>
+          <tr><th scope="row">マス目</th><td>建物の外形を 22 × 11 に分割（242マス、約1.6m × 2.1m）</td><td>空間ID ズームレベル20（182マス、約31m 四方、表記 z/f/x/y・f=0）</td></tr>
+          <tr><th scope="row">陣取りの仕組み</th><td>基地から隣のマスを広げる。部屋をすべて取ると制圧ボーナス</td><td>建物のポータルを占拠・強化し、リンクで三角形をつくるとフィールド。攻撃で中立化</td></tr>
+          <tr><th scope="row">戦略の幅</th><td>小さめ。近い場所の取り合い</td><td>大きめ。リンクの交差禁止・範囲・攻撃の駆け引き</td></tr>
+          <tr><th scope="row">データの準備</th><td>実際の間取りが必要（取得方法・公開してよいか未確認）</td><td>建物の名前と形は OpenStreetMap から取得済み</td></tr>
+          <tr><th scope="row">空間IDとの関係</th><td>立体（f を増やす）にすれば研究室を空間IDで表現できる</td><td>最初から空間IDのマス。将来 f を足して立体化できる</td></tr>
+          <tr><th scope="row">スマホ</th><td>縦長に回転して全体表示。マスは拡大しないと小さい</td><td>全体表示できるが、ポータルが密集する場所は拡大が必要</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <p class="lead">地図：OpenFreeMap／航空写真：国土地理院／建物・キャンパスの外形：© OpenStreetMap contributors</p>
+</main>
+<script>
+function setMode(mode) {
+  const compare = document.getElementById('compare');
+  document.getElementById('panel-a').hidden = mode === 'b';
+  document.getElementById('panel-b').hidden = mode === 'a';
+  compare.classList.toggle('single', mode !== 'side');
+  ['side', 'a', 'b'].forEach(m => document.getElementById('mode-' + m).classList.toggle('active', m === mode));
+}
+// 狭い画面では最初から1つずつ表示
+if (matchMedia('(max-width: 900px)').matches) setMode('a');
+</script>
+</body>
+</html>
