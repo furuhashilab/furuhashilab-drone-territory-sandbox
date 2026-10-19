@@ -90,8 +90,8 @@ drone-territory/
 2. リポジトリを手元に持ってくる（初回のみ）
 
    ```bash
-   git clone https://github.com/furuhashilab/uruhashilab-drone-territory-sandbox.git
-   cd uruhashilab-drone-territory-sandbox
+   git clone https://github.com/furuhashilab/furuhashilab-drone-territory-sandbox.git
+   cd furuhashilab-drone-territory-sandbox
    ```
 
 3. 最新の main から Branch を作る（Branch 名は Issue に書いてあります）
