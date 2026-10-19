@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Drone Territory Campus</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<style>
+  /* Layout: ヘッダー（両チームの戦況）→ 操作バー → 全面の地図。ポータル操作は地図下部のシート */
+  :root {
+    --team-a: #378ADD;
+    --team-b: #D85A30;
+    --target: #f5c518;
+    --bg: #f5f4f0;
+    --surface: #ffffff;
+    --text: #2c2c2a;
+    --text-sub: #5f5e5a;
+    --border: rgba(100,100,100,0.25);
+    --toast-bg: #2c2c2a;
+    --toast-text: #ffffff;
+    --map-cell: #ffffff;
+    --map-grid: #5f5e5a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1a1a18; --surface: #252523; --text: #e8e7e2; --text-sub: #a3a29b;
+      --border: rgba(200,200,200,0.18); --toast-bg: #e8e7e2; --toast-text: #1a1a18;
+      --map-cell: #3a3a36; --map-grid: #8a8983;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1a1a18; --surface: #252523; --text: #e8e7e2; --text-sub: #a3a29b;
+    --border: rgba(200,200,200,0.18); --toast-bg: #e8e7e2; --toast-text: #1a1a18;
+    --map-cell: #3a3a36; --map-grid: #8a8983;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; }
+  .app { display: flex; flex-direction: column; height: 100%; }
+
+  .header, .controls {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding-block: 8px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; flex-shrink: 0;
+  }
+  .header { justify-content: space-between; }
+  .header h1 { font-size: 15px; font-weight: 600; }
+  .header h1 small { font-size: 11px; color: var(--text-sub); font-weight: 400; margin-left: 4px; }
+
+  .teams { display: flex; gap: 8px; flex-wrap: wrap; }
+  .team-card {
+    display: flex; align-items: baseline; gap: 8px; padding: 4px 10px; border-radius: 10px;
+    border: 1.5px solid var(--border); font-variant-numeric: tabular-nums; transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .team-card.active.a { border-color: var(--team-a); box-shadow: 0 0 0 3px rgba(55,138,221,0.2); }
+  .team-card.active.b { border-color: var(--team-b); box-shadow: 0 0 0 3px rgba(216,90,48,0.2); }
+  .team-card .name { font-size: 12px; font-weight: 700; }
+  .team-card.a .name { color: var(--team-a); }
+  .team-card.b .name { color: var(--team-b); }
+  .stat { font-size: 13px; font-weight: 600; display: inline-block; }
+  .stat small { font-size: 10px; color: var(--text-sub); font-weight: 400; margin-left: 1px; }
+  .bump { animation: bump 0.4s ease; }
+  @keyframes bump { 40% { transform: scale(1.35); } }
+  .progress { flex-basis: 100%; height: 6px; display: flex; border-radius: 3px; overflow: hidden; background: var(--border); }
+  .progress div { transition: width 0.4s ease; }
+
+  .label { font-size: 12px; color: var(--text-sub); }
+  .seg { display: flex; gap: 6px; flex-wrap: wrap; }
+  .btn {
+    min-height: 36px; padding: 0 14px; border-radius: 18px;
+    border: 1.5px solid var(--border); background: transparent; color: var(--text);
+    font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+  }
+  .btn:active { transform: scale(0.96); }
+  .btn:focus-visible { outline: 2px solid var(--team-a); outline-offset: 2px; }
+  .btn:disabled { opacity: 0.4; cursor: default; }
+  .btn.a { border-color: var(--team-a); color: var(--team-a); }
+  .btn.b { border-color: var(--team-b); color: var(--team-b); }
+  .btn.a.active { background: var(--team-a); color: #fff; }
+  .btn.b.active { background: var(--team-b); color: #fff; }
+  .btn.base.active, .btn.solid { background: var(--text); color: var(--surface); border-color: var(--text); }
+  .spacer { flex: 1; }
+
+  #map { flex: 1; min-height: 0; position: relative; }
+
+  /* ポータル */
+  .portal { width: 30px; height: 30px; cursor: pointer; } /* position は MapLibre が absolute に設定する */
+  .portal .halo { position: absolute; inset: -6px; border-radius: 50%; border: 2px solid currentColor; opacity: 0; }
+  .portal { --pc: #8a8983; color: var(--pc); }
+  .portal.team-a { --pc: var(--team-a); }
+  .portal.team-b { --pc: var(--team-b); }
+  .portal.team-a .halo, .portal.team-b .halo { animation: halo 2.4s ease-out infinite; }
+  @keyframes halo { 0% { transform: scale(0.7); opacity: 0.9; } 100% { transform: scale(1.6); opacity: 0; } }
+  .portal .core {
+    position: absolute; inset: 0; border-radius: 50%; background: var(--pc); border: 2.5px solid #fff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3); display: grid; place-items: center;
+    color: #fff; font-size: 10px; font-weight: 800; font-variant-numeric: tabular-nums;
+  }
+  .portal .pname {
+    position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 3px;
+    font-size: 10px; font-weight: 700; color: #2c2c2a; background: rgba(255,255,255,0.85);
+    padding: 0 4px; border-radius: 3px; white-space: nowrap; pointer-events: none;
+  }
+  .portal.selected .core { box-shadow: 0 0 0 3px var(--text), 0 2px 6px rgba(0,0,0,0.3); }
+  .portal.target .core { box-shadow: 0 0 0 4px var(--target), 0 2px 6px rgba(0,0,0,0.3); animation: target 0.9s ease-in-out infinite alternate; }
+  @keyframes target { to { transform: scale(1.15); } }
+  .hide-names .portal .pname { display: none; }
+
+  /* ドローン */
+  .drone { width: 40px; height: 40px; pointer-events: none; }
+  .drone .bob { width: 100%; height: 100%; animation: bob 1.6s ease-in-out infinite; }
+  .drone .body { width: 100%; height: 100%; transition: transform 0.15s linear; }
+  .drone .rotor { transform-box: fill-box; transform-origin: center; animation: spin 0.18s linear infinite; }
+  .drone.takeoff .bob { animation: takeoff 1.1s ease-in-out; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes bob { 50% { transform: translateY(-4px); } }
+  @keyframes takeoff { 40% { transform: translateY(-22px) scale(1.25) rotate(180deg); } 100% { transform: rotate(360deg); } }
+
+  .ripple { width: 18px; height: 18px; border-radius: 50%; border: 3px solid; animation: ripple 0.7s ease-out forwards; }
+  @keyframes ripple { from { transform: scale(0.3); opacity: 1; } to { transform: scale(3.2); opacity: 0; } }
+  .float-text { font-size: 13px; font-weight: 800; text-shadow: 0 1px 2px rgba(255,255,255,0.9); animation: floatup 0.9s ease-out forwards; }
+  @keyframes floatup { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-28px); opacity: 0; } }
+
+  /* 地図上のパネル */
+  .banner {
+    position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%) scale(0.6);
+    padding: 14px 26px; border-radius: 14px; color: #fff; font-weight: 800; font-size: 20px; text-align: center;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.25); opacity: 0; pointer-events: none; z-index: 5; white-space: nowrap;
+  }
+  .banner small { display: block; font-size: 12px; font-weight: 600; opacity: 0.9; margin-top: 2px; }
+  .banner.show { animation: banner 1.8s ease forwards; }
+  @keyframes banner {
+    0% { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
+    15% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+    25% { transform: translate(-50%, -50%) scale(1); }
+    80% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -60%) scale(1); }
+  }
+  .linkbar {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 4;
+    display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 14px; border-radius: 20px;
+    background: var(--surface); color: var(--text); box-shadow: 0 4px 16px rgba(0,0,0,0.2); font-size: 13px; font-weight: 600;
+    max-width: calc(100% - 100px);
+  }
+  .sheet {
+    position: absolute; left: 50%; transform: translateX(-50%); z-index: 4;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px)); width: min(420px, calc(100% - 24px));
+    background: var(--surface); color: var(--text); border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.25);
+    padding: 12px 14px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .sheet-head { display: flex; align-items: center; gap: 8px; }
+  .sheet-head .title { font-size: 16px; font-weight: 800; }
+  .chip { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; color: #fff; background: #8a8983; }
+  .chip.a { background: var(--team-a); }
+  .chip.b { background: var(--team-b); }
+  .sheet-meta { font-size: 12px; color: var(--text-sub); font-variant-numeric: tabular-nums; }
+  .sheet-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .close { margin-left: auto; min-height: 32px; padding: 0 10px; }
+  .rules { font-size: 13px; line-height: 1.7; padding-left: 1.2em; }
+  .rules b { font-variant-numeric: tabular-nums; }
+
+  .toast {
+    position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+    background: var(--toast-bg); color: var(--toast-text); padding: 8px 18px; border-radius: 20px;
+    font-size: 13px; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 10;
+    max-width: calc(100% - 32px); text-align: center;
+  }
+  .toast.show { opacity: 1; }
+  .toast.lift { bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
+
+  @media (max-width: 600px) {
+    .hint { display: none; } .team-card { padding: 3px 8px; gap: 6px; }
+    .portal { width: 22px; height: 22px; } .portal .core { font-size: 8px; border-width: 2px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <h1>Drone Territory<small>相模原キャンパス PoC（仮ルール）</small></h1>
+    <div class="teams">
+      <div class="team-card a active" id="card-A">
+        <span class="name">A</span>
+        <span class="stat" id="cells-A">0<small>マス</small></span>
+        <span class="stat" id="pts-A">0<small>pt</small></span>
+        <span class="stat" id="portals-A">0<small>P</small></span>
+        <span class="stat" id="fields-A">0<small>F</small></span>
+      </div>
+      <div class="team-card b" id="card-B">
+        <span class="name">B</span>
+        <span class="stat" id="cells-B">0<small>マス</small></span>
+        <span class="stat" id="pts-B">0<small>pt</small></span>
+        <span class="stat" id="portals-B">0<small>P</small></span>
+        <span class="stat" id="fields-B">0<small>F</small></span>
+      </div>
+    </div>
+    <div class="progress" id="progress"></div>
+  </div>
+
+  <div class="controls">
+    <div class="seg">
+      <button class="btn a active" id="btn-A" onclick="selectTeam('A')">Team A</button>
+      <button class="btn b" id="btn-B" onclick="selectTeam('B')">Team B</button>
+    </div>
+    <button class="btn solid" onclick="registerFlight()">飛行ログを登録（デモ）</button>
+    <span class="spacer"></span>
+    <span class="label hint">建物のポータルをタップ</span>
+    <div class="seg">
+      <button class="btn" onclick="fitCampus()">全体</button>
+      <button class="btn base active" id="base-map" onclick="setBase('map')">地図</button>
+      <button class="btn base" id="base-photo" onclick="setBase('photo')">写真</button>
+      <button class="btn" onclick="showRules()">ルール</button>
+      <button class="btn" onclick="resetGame()">リセット</button>
+    </div>
+  </div>
+
+  <div id="map">
+    <div class="banner" id="banner"></div>
+    <div class="linkbar" id="linkbar" hidden><span id="linkbar-text"></span><button class="btn close" onclick="cancelLink()">やめる</button></div>
+    <div class="sheet" id="sheet" hidden></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ---------------------------------------------------------------
+// 仮ルール（#4 ポイントルールで議論中。数値はここを変えれば調整できる）
+// ---------------------------------------------------------------
+const RULES = {
+  startPoints: 8,          // 開始時のポイント
+  pointsPerMinute: 1,      // 飛行1分あたりのポイント
+  capturePortal: 3,        // 中立ポータルの占拠
+  upgradePortal: 2,        // ポータルのレベルを1上げる
+  maxLevel: 4,             // ポータルの最大レベル
+  attackPortal: 2,         // 相手ポータルのレベルを1下げる
+  linkCost: 2,             // リンクを張る
+  linkRangePerLevel: 120,  // リンクできる距離（m）＝ レベル × この値
+  claimCell: 1,            // 未取得マスを取る
+  stealCell: 2,            // 相手のマスを奪う
+  fieldBonus: 5,           // コントロールフィールド形成ボーナス
+  demoFlightMinutes: [3, 12],
+};
+
+// ---------------------------------------------------------------
+// 盤面データ（© OpenStreetMap contributors / ODbL）
+// キャンパスの外形と、名前のある大学の建物（ポータル）
+// ---------------------------------------------------------------
+const CAMPUS_RING = [[139.402787,35.569214],[139.4012647,35.5681613],[139.399749,35.5671436],[139.3992786,35.5668282],[139.3993126,35.5667957],[139.3992556,35.5667628],[139.3992252,35.5667907],[139.3991843,35.5667635],[139.3999563,35.5663297],[139.4004297,35.5660636],[139.4003662,35.5659793],[139.4039281,35.564127],[139.4054913,35.5651851],[139.4052103,35.5654533],[139.4054299,35.5655906],[139.404905,35.5661085],[139.4057601,35.5667008],[139.4040714,35.5682091],[139.4034284,35.568851],[139.4034243,35.5688559],[139.4032177,35.5687155],[139.4029007,35.5690834],[139.402787,35.569214]];
+const PORTAL_DATA = [{"name":"A棟","lng":139.4027947,"lat":35.5671635},{"name":"B棟","lng":139.4029258,"lat":35.56642},{"name":"C棟（チャペル）","lng":139.4018199,"lat":35.5664408},{"name":"D棟","lng":139.4011241,"lat":35.5662853},{"name":"E棟","lng":139.4004741,"lat":35.5670488},{"name":"F棟","lng":139.4016642,"lat":35.5671466},{"name":"G棟","lng":139.4019991,"lat":35.5679716},{"name":"H棟","lng":139.4027241,"lat":35.5686346},{"name":"I棟","lng":139.4047153,"lat":35.5673839},{"name":"J棟","lng":139.4039344,"lat":35.5671711},{"name":"K棟","lng":139.4042491,"lat":35.5670881},{"name":"L棟","lng":139.4043626,"lat":35.5668539},{"name":"M棟","lng":139.4043242,"lat":35.5663758},{"name":"N棟","lng":139.4037158,"lat":35.5661096},{"name":"O棟","lng":139.4029338,"lat":35.5655338},{"name":"P棟","lng":139.4045855,"lat":35.5662416},{"name":"R棟","lng":139.4026354,"lat":35.5688733},{"name":"S棟","lng":139.3997917,"lat":35.5666934},{"name":"T棟","lng":139.4014305,"lat":35.5680647},{"name":"U棟","lng":139.4041764,"lat":35.5679072},{"name":"V棟","lng":139.4032171,"lat":35.5674401}];
+
+// ドローンの出発地点（キャンパスの西端・東端）
+const START = { A: [139.39985, 35.56662], B: [139.40500, 35.56610] };
+const TEAM_COLOR = { A: '#378ADD', B: '#D85A30' };
+const other = t => (t === 'A' ? 'B' : 'A');
+const token = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+// ---------------------------------------------------------------
+// 空間ID（ズームレベル Z の XYZ タイル）。高さ方向 f は今は 0 固定
+// 空間IDの表記は z/f/x/y。このゲームのキーは z/x/y
+// ---------------------------------------------------------------
+const Z = 20;
+const N = 2 ** Z;
+const lngToX = lng => (lng + 180) / 360 * N;
+const latToY = lat => { const r = lat * Math.PI / 180; return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * N; };
+const xToLng = x => x / N * 360 - 180;
+const yToLat = y => Math.atan(Math.sinh(Math.PI * (1 - 2 * y / N))) * 180 / Math.PI;
+const keyOf = (x, y) => `${Z}/${x}/${y}`;
+const spatialId = key => { const [z, x, y] = key.split('/'); return `${z}/0/${x}/${y}`; };
+
+function insideRing([px, py], ring) {
+  let ins = false;
+  for (let i = 0; i < ring.length - 1; i++) {
+    const [x1, y1] = ring[i], [x2, y2] = ring[i + 1];
+    if ((y1 > py) !== (y2 > py) && px < (x2 - x1) * (py - y1) / (y2 - y1) + x1) ins = !ins;
+  }
+  return ins;
+}
+
+// キャンパス内のマス（中心がキャンパス内にあるタイル）
+const cells = {};      // key → { x, y, id, center }
+const cellFeatures = [];
+(() => {
+  const lngs = CAMPUS_RING.map(p => p[0]), lats = CAMPUS_RING.map(p => p[1]);
+  const x0 = Math.floor(lngToX(Math.min(...lngs))), x1 = Math.floor(lngToX(Math.max(...lngs)));
+  const y0 = Math.floor(latToY(Math.max(...lats))), y1 = Math.floor(latToY(Math.min(...lats)));
+  let id = 0;
+  for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) {
+    const center = [xToLng(x + 0.5), yToLat(y + 0.5)];
+    if (!insideRing(center, CAMPUS_RING)) continue;
+    const key = keyOf(x, y);
+    cells[key] = { x, y, id, center };
+    const w = xToLng(x), e = xToLng(x + 1), n = yToLat(y), s = yToLat(y + 1);
+    cellFeatures.push({ type: 'Feature', id, properties: { key },
+      geometry: { type: 'Polygon', coordinates: [[[w, n], [e, n], [e, s], [w, s], [w, n]]] } });
+    id++;
+  }
+})();
+const cellOf = ([lng, lat]) => keyOf(Math.floor(lngToX(lng)), Math.floor(latToY(lat)));
+function neighbors(key) {
+  const { x, y } = cells[key];
+  return [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]].map(([a, b]) => keyOf(a, b)).filter(k => k in cells);
+}
+
+// 平面座標（m）。リンクの交差判定・距離・フィールド内判定に使う
+const LAT0 = 35.5667, KX = 111320 * Math.cos(LAT0 * Math.PI / 180);
+const toXY = ([lng, lat]) => [(lng - 139.402) * KX, (lat - LAT0) * 111320];
+const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+
+const portals = PORTAL_DATA.map((p, i) => ({ id: i, name: p.name, lngLat: [p.lng, p.lat], xy: toXY([p.lng, p.lat]), cell: cellOf([p.lng, p.lat]) }));
+
+// ---------------------------------------------------------------
+// ゲームの状態（将来 Supabase に保存する想定）
+//   cellState: 空間ID(z/x/y) → 'A' | 'B'（直接取ったマス）
+//   portalState: ポータルID → { owner, level }
+//   links: [{ a, b, team }]   fields: [{ ids:[a,b,c], team, cells:[key…] }]
+// ---------------------------------------------------------------
+let cellState, portalState, links, fields, points, currentTeam = 'A', busy = false, linkFrom = null, selected = null;
+let fieldOwner = {};
+
+// ---------------------------------------------------------------
+// 地図
+// ---------------------------------------------------------------
+const GSI = '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank">国土地理院</a>';
+const map = new maplibregl.Map({
+  container: 'map',
+  style: 'https://tiles.openfreemap.org/styles/positron', // OpenFreeMap（APIキー不要）
+  center: [139.4024, 35.5667], zoom: 16.5, maxZoom: 21,
+  pitchWithRotate: false, dragRotate: false,
+});
+map.touchZoomRotate.disableRotation();
+map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left');
+
+map.once('style.load', () => {
+  map.addSource('photo', { type: 'raster', tiles: ['https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg'], tileSize: 256, maxzoom: 18, attribution: GSI });
+  map.addSource('campus', { type: 'geojson', data: { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [CAMPUS_RING] } },
+    attribution: 'キャンパス・建物 © <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap contributors</a>' });
+  map.addSource('cells', { type: 'geojson', data: { type: 'FeatureCollection', features: cellFeatures } });
+  map.addSource('fields', { type: 'geojson', data: fc([]) });
+  map.addSource('links', { type: 'geojson', data: fc([]) });
+  map.addSource('trail', { type: 'geojson', data: fc([]) });
+
+  map.addLayer({ id: 'photo', type: 'raster', source: 'photo', layout: { visibility: 'none' } });
+  map.addLayer({ id: 'cells-fill', type: 'fill', source: 'cells', paint: {
+    'fill-color': ['case',
+      ['==', ['feature-state', 'owner'], 'A'], TEAM_COLOR.A, ['==', ['feature-state', 'owner'], 'B'], TEAM_COLOR.B,
+      ['==', ['feature-state', 'field'], 'A'], TEAM_COLOR.A, ['==', ['feature-state', 'field'], 'B'], TEAM_COLOR.B,
+      token('--map-cell')],
+    'fill-opacity': ['case',
+      ['boolean', ['feature-state', 'hover'], false], 0.75,
+      ['any', ['==', ['feature-state', 'owner'], 'A'], ['==', ['feature-state', 'owner'], 'B']], 0.55,
+      ['any', ['==', ['feature-state', 'field'], 'A'], ['==', ['feature-state', 'field'], 'B']], 0.3,
+      0.25] } });
+  map.addLayer({ id: 'cells-line', type: 'line', source: 'cells', paint: { 'line-color': token('--map-grid'), 'line-width': 1, 'line-opacity': 0.9 } });
+  map.addLayer({ id: 'cells-claimable', type: 'line', source: 'cells', paint: {
+    'line-color': '#f5c518', 'line-width': 2,
+    'line-opacity': ['case', ['boolean', ['feature-state', 'claimable'], false], 1, 0] } });
+  map.addLayer({ id: 'campus-line', type: 'line', source: 'campus', paint: { 'line-color': token('--map-grid'), 'line-width': 2, 'line-dasharray': [3, 2] } });
+  map.addLayer({ id: 'fields-fill', type: 'fill', source: 'fields', paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.18 } });
+  map.addLayer({ id: 'links-glow', type: 'line', source: 'links', layout: { 'line-cap': 'round' }, paint: { 'line-color': ['get', 'color'], 'line-width': 9, 'line-opacity': 0.25, 'line-blur': 3 } });
+  map.addLayer({ id: 'links', type: 'line', source: 'links', layout: { 'line-cap': 'round' }, paint: { 'line-color': ['get', 'color'], 'line-width': 3 } });
+  map.addLayer({ id: 'trail', type: 'line', source: 'trail', layout: { 'line-cap': 'round' }, paint: { 'line-color': ['get', 'color'], 'line-width': 3, 'line-dasharray': [1, 1.5] } });
+
+  fitCampus();
+  addMarkers();
+  resetGame(true);
+  pulse();
+  watchTheme();
+});
+
+const fc = features => ({ type: 'FeatureCollection', features });
+
+function fitCampus() {
+  const lngs = CAMPUS_RING.map(p => p[0]), lats = CAMPUS_RING.map(p => p[1]);
+  map.fitBounds([[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]], { padding: 40, duration: 0 });
+}
+
+function setBase(name) {
+  map.setLayoutProperty('photo', 'visibility', name === 'photo' ? 'visible' : 'none');
+  document.getElementById('base-map').classList.toggle('active', name === 'map');
+  document.getElementById('base-photo').classList.toggle('active', name === 'photo');
+}
+
+function watchTheme() {
+  const apply = () => {
+    map.setPaintProperty('cells-line', 'line-color', token('--map-grid'));
+    map.setPaintProperty('campus-line', 'line-color', token('--map-grid'));
+    map.setPaintProperty('cells-fill', 'fill-color', ['case',
+      ['==', ['feature-state', 'owner'], 'A'], TEAM_COLOR.A, ['==', ['feature-state', 'owner'], 'B'], TEAM_COLOR.B,
+      ['==', ['feature-state', 'field'], 'A'], TEAM_COLOR.A, ['==', ['feature-state', 'field'], 'B'], TEAM_COLOR.B,
+      token('--map-cell')]);
+  };
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', apply);
+  new MutationObserver(apply).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+}
+
+// 取れるマスを点滅（MapLibre のスタイルは 0.8 秒ごとに切り替えるだけ）
+function pulse() {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  let bright = true;
+  setInterval(() => {
+    bright = !bright;
+    map.setPaintProperty('cells-claimable', 'line-opacity', ['case', ['boolean', ['feature-state', 'claimable'], false], bright ? 1 : 0.3, 0]);
+  }, 800);
+}
+
+// ---------------------------------------------------------------
+// マーカー（ポータル・ドローン）
+// ---------------------------------------------------------------
+const portalEls = [];
+const drones = {};
+let lastMarkerTap = 0;
+function addMarkers() {
+  portals.forEach(p => {
+    const el = document.createElement('div');
+    el.className = 'portal neutral';
+    el.innerHTML = '<div class="halo"></div><div class="core"></div><div class="pname"></div>';
+    el.querySelector('.pname').textContent = p.name;
+    el.setAttribute('role', 'button');
+    el.setAttribute('aria-label', p.name);
+    el.addEventListener('click', e => { e.stopPropagation(); lastMarkerTap = performance.now(); onPortal(p); });
+    portalEls[p.id] = el;
+    new maplibregl.Marker({ element: el }).setLngLat(p.lngLat).addTo(map);
+  });
+  ['A', 'B'].forEach(t => {
+    const d = document.createElement('div');
+    d.className = 'drone';
+    d.innerHTML = `<div class="bob"><div class="body">${droneSvg(TEAM_COLOR[t])}</div></div>`;
+    drones[t] = { el: d, marker: new maplibregl.Marker({ element: d, offset: [16, -16] }).setLngLat(START[t]).addTo(map), pos: START[t].slice() };
+  });
+  map.on('zoom', () => map.getContainer().classList.toggle('hide-names', map.getZoom() < 16.6));
+}
+
+function droneSvg(color) {
+  const rotor = (x, y) => `<circle cx="${x}" cy="${y}" r="9" fill="rgba(255,255,255,0.35)" stroke="${color}" stroke-width="1.5"/>
+    <g class="rotor"><rect x="${x - 8}" y="${y - 1.5}" width="16" height="3" rx="1.5" fill="#2c2c2a"/></g>`;
+  return `<svg viewBox="0 0 44 44" width="40" height="40">
+    <line x1="10" y1="10" x2="34" y2="34" stroke="#2c2c2a" stroke-width="3"/>
+    <line x1="34" y1="10" x2="10" y2="34" stroke="#2c2c2a" stroke-width="3"/>
+    ${rotor(10, 10)}${rotor(34, 10)}${rotor(10, 34)}${rotor(34, 34)}
+    <rect x="15" y="15" width="14" height="14" rx="4" fill="${color}" stroke="#fff" stroke-width="1.5"/>
+    <circle cx="22" cy="17.5" r="1.8" fill="#fff"/>
+  </svg>`;
+}
+
+// ---------------------------------------------------------------
+// ルール判定
+// ---------------------------------------------------------------
+const ownerOf = key => cellState[key] || fieldOwner[key] || null;
+const range = p => portalState[p.id].level * RULES.linkRangePerLevel;
+const linked = (a, b) => links.some(l => (l.a === a && l.b === b) || (l.a === b && l.b === a));
+
+function segmentsCross(p1, p2, p3, p4) {
+  const d = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  const d1 = d(p3, p4, p1), d2 = d(p3, p4, p2), d3 = d(p1, p2, p3), d4 = d(p1, p2, p4);
+  return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0)) && d1 && d2 && d3 && d4;
+}
+function linkProblem(team, from, to) {
+  if (from.id === to.id) return '同じポータルにはリンクできません';
+  if (portalState[to.id].owner !== team) return 'リンクできるのは自分のチームのポータルだけです';
+  if (linked(from.id, to.id)) return 'すでにリンクしています';
+  if (dist(from.xy, to.xy) > range(from)) return `届きません（${Math.round(dist(from.xy, to.xy))}m／範囲 ${range(from)}m）。ポータルを強化しよう`;
+  const crosses = links.some(l => ![l.a, l.b].includes(from.id) && ![l.a, l.b].includes(to.id) &&
+    segmentsCross(from.xy, to.xy, portals[l.a].xy, portals[l.b].xy));
+  if (crosses) return 'ほかのリンクと交差するので張れません';
+  return null;
+}
+
+function cellCost(team, key) {
+  const owner = ownerOf(key);
+  if (owner === team) return null;
+  if (!neighbors(key).some(k => ownerOf(k) === team)) return null;
+  return owner ? RULES.stealCell : RULES.claimCell;
+}
+
+function inTriangle(pt, a, b, c) {
+  const s = (p, q, r) => (p[0] - r[0]) * (q[1] - r[1]) - (q[0] - r[0]) * (p[1] - r[1]);
+  const d1 = s(pt, a, b), d2 = s(pt, b, c), d3 = s(pt, c, a);
+  return !(((d1 < 0) || (d2 < 0) || (d3 < 0)) && ((d1 > 0) || (d2 > 0) || (d3 > 0)));
+}
+
+// ---------------------------------------------------------------
+// 操作：マス
+// ---------------------------------------------------------------
+map.on('click', e => {
+  if (performance.now() - lastMarkerTap < 300) return;
+  if (linkFrom !== null) return cancelLink();
+  closeSheet();
+});
+map.on('click', 'cells-fill', e => {
+  if (performance.now() - lastMarkerTap < 300 || busy || linkFrom !== null) return;
+  const key = e.features[0].properties.key;
+  const owner = ownerOf(key);
+  const cost = cellCost(currentTeam, key);
+  if (owner === currentTeam) return showToast(`${spatialId(key)} — すでに Team ${currentTeam} の陣地`);
+  if (cost === null) return showToast('自分の陣地のとなりのマスだけ取れます。まずポータルを占拠しよう');
+  if (cost > points[currentTeam]) return showToast(`ポイントが足りません（${cost}pt 必要）— 飛行ログを登録しよう`);
+  const team = currentTeam;
+  spend(team, cost);
+  flyTo(team, cells[key].center, () => {
+    cellState[key] = team;
+    effect(cells[key].center, team, `-${cost}pt`);
+    showToast(`${owner ? '奪取' : '獲得'}：空間ID ${spatialId(key)}`);
+    refresh();
+  });
+});
+
+let hoverId = null;
+map.on('mousemove', 'cells-fill', e => {
+  if (hoverId !== null) map.setFeatureState({ source: 'cells', id: hoverId }, { hover: false });
+  hoverId = e.features[0].id;
+  map.setFeatureState({ source: 'cells', id: hoverId }, { hover: true });
+  map.getCanvas().style.cursor = 'pointer';
+});
+map.on('mouseleave', 'cells-fill', () => {
+  if (hoverId !== null) map.setFeatureState({ source: 'cells', id: hoverId }, { hover: false });
+  hoverId = null;
+  map.getCanvas().style.cursor = '';
+});
+
+// ---------------------------------------------------------------
+// 操作：ポータル
+// ---------------------------------------------------------------
+function onPortal(p) {
+  if (busy) return;
+  if (linkFrom !== null) return tryLink(p);
+  openPortalSheet(p);
+}
+
+function openPortalSheet(p) {
+  selected = p.id;
+  updatePortalEls();
+  const st = portalState[p.id];
+  const team = currentTeam;
+  const chip = st.owner ? `<span class="chip ${st.owner.toLowerCase()}">Team ${st.owner}</span>` : '<span class="chip">中立</span>';
+  const meta = st.owner
+    ? `レベル ${st.level}／${RULES.maxLevel}・リンク範囲 ${range(p)}m・リンク ${links.filter(l => l.a === p.id || l.b === p.id).length}本`
+    : 'まだ誰のものでもありません';
+  const actions = [];
+  if (!st.owner) actions.push(action(`占拠する（${RULES.capturePortal}pt）`, () => capture(p), RULES.capturePortal));
+  if (st.owner === team) {
+    if (st.level < RULES.maxLevel) actions.push(action(`強化する（${RULES.upgradePortal}pt）`, () => upgrade(p), RULES.upgradePortal));
+    actions.push(action(`リンクを張る（${RULES.linkCost}pt）`, () => startLink(p), RULES.linkCost));
+  }
+  if (st.owner === other(team)) actions.push(action(`攻撃する（${RULES.attackPortal}pt）`, () => attack(p), RULES.attackPortal));
+  const sheet = document.getElementById('sheet');
+  sheet.innerHTML = `
+    <div class="sheet-head"><span class="title"></span>${chip}<button class="btn close" onclick="closeSheet()">閉じる</button></div>
+    <div class="sheet-meta">${meta}<br>空間ID ${spatialId(p.cell)}</div>
+    <div class="sheet-actions"></div>`;
+  sheet.querySelector('.title').textContent = p.name;
+  actions.forEach(b => sheet.querySelector('.sheet-actions').appendChild(b));
+  if (!actions.length) sheet.querySelector('.sheet-actions').innerHTML = '<span class="sheet-meta">このポータルでできることはありません</span>';
+  sheet.hidden = false;
+  document.getElementById('toast').classList.add('lift');
+}
+function action(label, fn, cost) {
+  const b = document.createElement('button');
+  b.className = `btn ${currentTeam.toLowerCase()} active`;
+  b.textContent = label;
+  if (cost > points[currentTeam]) { b.disabled = true; b.title = 'ポイントが足りません'; }
+  b.onclick = () => { closeSheet(); fn(); };
+  return b;
+}
+function closeSheet() {
+  document.getElementById('sheet').hidden = true;
+  document.getElementById('toast').classList.remove('lift');
+  selected = null;
+  updatePortalEls();
+}
+
+function capture(p) {
+  const team = currentTeam;
+  spend(team, RULES.capturePortal);
+  flyTo(team, p.lngLat, () => {
+    portalState[p.id] = { owner: team, level: 1 };
+    cellState[p.cell] = team;
+    effect(p.lngLat, team, `-${RULES.capturePortal}pt`);
+    showToast(`Team ${team} が ${p.name} を占拠！`);
+    refresh();
+  });
+}
+function upgrade(p) {
+  const team = currentTeam;
+  spend(team, RULES.upgradePortal);
+  flyTo(team, p.lngLat, () => {
+    portalState[p.id].level++;
+    effect(p.lngLat, team, `L${portalState[p.id].level}`);
+    showToast(`${p.name} をレベル ${portalState[p.id].level} に強化（リンク範囲 ${range(p)}m）`);
+    refresh();
+  });
+}
+function attack(p) {
+  const team = currentTeam;
+  spend(team, RULES.attackPortal);
+  flyTo(team, p.lngLat, () => {
+    const st = portalState[p.id];
+    st.level--;
+    effect(p.lngLat, team, '攻撃！');
+    if (st.level <= 0) {
+      const lostLinks = links.filter(l => l.a === p.id || l.b === p.id).length;
+      const lostFields = fields.filter(f => f.ids.includes(p.id)).length;
+      portalState[p.id] = { owner: null, level: 0 };
+      links = links.filter(l => l.a !== p.id && l.b !== p.id);
+      fields = fields.filter(f => !f.ids.includes(p.id));
+      showBanner(team, `${p.name} を中立化！`, `リンク ${lostLinks}本・フィールド ${lostFields}枚 を破壊`);
+    } else {
+      showToast(`${p.name} のレベルが ${st.level} に下がった`);
+    }
+    refresh();
+  });
+}
+
+function startLink(p) {
+  linkFrom = p.id;
+  const targets = portals.filter(q => !linkProblem(currentTeam, p, q));
+  document.getElementById('linkbar-text').textContent = targets.length
+    ? `${p.name} からのリンク先を選ぶ（光っているポータル）`
+    : `${p.name} からリンクできるポータルがありません`;
+  document.getElementById('linkbar').hidden = false;
+  updatePortalEls();
+}
+function cancelLink() {
+  linkFrom = null;
+  document.getElementById('linkbar').hidden = true;
+  updatePortalEls();
+}
+function tryLink(to) {
+  const from = portals[linkFrom];
+  const team = currentTeam;
+  const problem = linkProblem(team, from, to);
+  if (problem) return showToast(problem);
+  cancelLink();
+  spend(team, RULES.linkCost);
+  flyTo(team, from.lngLat, () => growLink(from, to, team, () => {
+    links.push({ a: from.id, b: to.id, team });
+    const made = [];
+    portals.forEach(r => {
+      if (r.id === from.id || r.id === to.id || portalState[r.id].owner !== team) return;
+      if (!linked(from.id, r.id) || !linked(to.id, r.id)) return;
+      const ids = [from.id, to.id, r.id];
+      if (fields.some(f => f.ids.every(i => ids.includes(i)))) return;
+      const tri = ids.map(i => portals[i].xy);
+      const covered = Object.keys(cells).filter(k => inTriangle(toXY(cells[k].center), ...tri));
+      fields.push({ ids, team, cells: covered });
+      made.push(covered.length);
+    });
+    if (made.length) {
+      const bonus = made.length * RULES.fieldBonus;
+      points[team] += bonus;
+      showBanner(team, `コントロールフィールド形成！`, `${made.reduce((a, b) => a + b, 0)}マスを支配・ボーナス +${bonus}pt`);
+    } else {
+      showToast(`${from.name} ⇄ ${to.name} をリンク`);
+    }
+    refresh();
+  }));
+}
+
+// リンクが伸びていくアニメーション
+function growLink(from, to, team, done) {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const start = performance.now(), duration = reduce ? 0 : 600;
+  const base = linkFeatures();
+  function step(now) {
+    const t = duration ? Math.min((now - start) / duration, 1) : 1;
+    const cur = [from.lngLat[0] + (to.lngLat[0] - from.lngLat[0]) * t, from.lngLat[1] + (to.lngLat[1] - from.lngLat[1]) * t];
+    map.getSource('links').setData(fc([...base, line([from.lngLat, cur], TEAM_COLOR[team])]));
+    if (t < 1) return requestAnimationFrame(step);
+    done();
+  }
+  requestAnimationFrame(step);
+}
+const line = (coords, color) => ({ type: 'Feature', properties: { color }, geometry: { type: 'LineString', coordinates: coords } });
+const linkFeatures = () => links.map(l => line([portals[l.a].lngLat, portals[l.b].lngLat], TEAM_COLOR[l.team]));
+
+// ---------------------------------------------------------------
+// ドローンと演出
+// ---------------------------------------------------------------
+function flyTo(team, to, done) {
+  const d = drones[team];
+  const from = d.pos.slice();
+  const meters = dist(toXY(from), toXY(to));
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const duration = reduce ? 0 : Math.min(400 + meters * 4, 1600);
+  const p0 = map.project(from), p1 = map.project(to);
+  d.el.querySelector('.body').style.transform = `rotate(${Math.atan2(p1.y - p0.y, p1.x - p0.x) * 180 / Math.PI + 90}deg)`;
+  busy = true;
+  const start = performance.now();
+  const ease = t => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+  function step(now) {
+    const t = duration ? Math.min((now - start) / duration, 1) : 1;
+    const k = ease(t);
+    const cur = [from[0] + (to[0] - from[0]) * k, from[1] + (to[1] - from[1]) * k];
+    d.marker.setLngLat(cur);
+    map.getSource('trail').setData(fc([line([from, cur], TEAM_COLOR[team])]));
+    if (t < 1) return requestAnimationFrame(step);
+    d.pos = to.slice();
+    busy = false;
+    setTimeout(() => map.getSource('trail').setData(fc([])), 250);
+    done();
+  }
+  requestAnimationFrame(step);
+}
+
+function effect(lngLat, team, text) {
+  // マーカー要素自体の transform は MapLibre が位置指定に使うので、アニメーションは内側の要素にかける
+  const add = (cls, offset, ms, setup) => {
+    const wrap = document.createElement('div');
+    wrap.style.pointerEvents = 'none';
+    const inner = document.createElement('div');
+    inner.className = cls;
+    setup(inner);
+    wrap.appendChild(inner);
+    const m = new maplibregl.Marker({ element: wrap, offset }).setLngLat(lngLat).addTo(map);
+    setTimeout(() => m.remove(), ms);
+  };
+  add('ripple', [0, 0], 750, el => { el.style.borderColor = TEAM_COLOR[team]; });
+  if (text) add('float-text', [0, -22], 950, el => { el.style.color = TEAM_COLOR[team]; el.textContent = text; });
+}
+
+function registerFlight() {
+  const team = currentTeam;
+  const [lo, hi] = RULES.demoFlightMinutes;
+  const min = lo + Math.floor(Math.random() * (hi - lo + 1));
+  const gain = min * RULES.pointsPerMinute;
+  const d = drones[team].el;
+  d.classList.remove('takeoff'); void d.offsetWidth; d.classList.add('takeoff');
+  setTimeout(() => d.classList.remove('takeoff'), 1100);
+  points[team] += gain;
+  effect(drones[team].pos, team, `+${gain}pt`);
+  showToast(`Team ${team}：${min}分 飛行 → +${gain}pt`);
+  refresh();
+}
+
+function spend(team, cost) { points[team] -= cost; updateHud(); }
+
+// ---------------------------------------------------------------
+// 状態の反映
+// ---------------------------------------------------------------
+function refresh() {
+  fieldOwner = {};
+  fields.forEach(f => f.cells.forEach(k => { fieldOwner[k] = f.team; }));
+  Object.entries(cells).forEach(([key, c]) => {
+    const cost = cellCost(currentTeam, key);
+    map.setFeatureState({ source: 'cells', id: c.id }, {
+      owner: cellState[key] || null, field: fieldOwner[key] || null,
+      claimable: cost !== null && cost <= points[currentTeam],
+    });
+  });
+  map.getSource('links').setData(fc(linkFeatures()));
+  map.getSource('fields').setData(fc(fields.map(f => ({ type: 'Feature', properties: { color: TEAM_COLOR[f.team] },
+    geometry: { type: 'Polygon', coordinates: [[...f.ids.map(i => portals[i].lngLat), portals[f.ids[0]].lngLat]] } }))));
+  updatePortalEls();
+  updateHud();
+}
+
+function updatePortalEls() {
+  const from = linkFrom !== null ? portals[linkFrom] : null;
+  portals.forEach(p => {
+    const st = portalState[p.id];
+    const el = portalEls[p.id];
+    el.classList.toggle('team-a', st.owner === 'A');
+    el.classList.toggle('team-b', st.owner === 'B');
+    el.classList.toggle('neutral', !st.owner);
+    el.classList.toggle('selected', selected === p.id || (from && from.id === p.id));
+    el.classList.toggle('target', !!from && !linkProblem(currentTeam, from, p));
+    el.querySelector('.core').textContent = st.owner ? `L${st.level}` : '';
+  });
+}
+
+const prev = {};
+function updateHud() {
+  ['A', 'B'].forEach(t => {
+    const values = {
+      cells: Object.keys(cells).filter(k => ownerOf(k) === t).length,
+      pts: points[t],
+      portals: portals.filter(p => portalState[p.id].owner === t).length,
+      fields: fields.filter(f => f.team === t).length,
+    };
+    const units = { cells: 'マス', pts: 'pt', portals: 'P', fields: 'F' };
+    Object.entries(values).forEach(([k, v]) => {
+      const el = document.getElementById(`${k}-${t}`);
+      el.innerHTML = `${v}<small>${units[k]}</small>`;
+      if (prev[k + t] !== undefined && prev[k + t] !== v) { el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
+      prev[k + t] = v;
+    });
+  });
+  const total = cellFeatures.length;
+  const a = Object.keys(cells).filter(k => ownerOf(k) === 'A').length;
+  const b = Object.keys(cells).filter(k => ownerOf(k) === 'B').length;
+  document.getElementById('progress').innerHTML =
+    `<div style="width:${a / total * 100}%;background:var(--team-a)"></div><div style="flex:1"></div>` +
+    `<div style="width:${b / total * 100}%;background:var(--team-b)"></div>`;
+}
+
+function selectTeam(t) {
+  currentTeam = t;
+  ['A', 'B'].forEach(x => {
+    document.getElementById('btn-' + x).classList.toggle('active', x === t);
+    document.getElementById('card-' + x).classList.toggle('active', x === t);
+  });
+  cancelLink();
+  closeSheet();
+  refresh();
+}
+
+function resetGame(silent) {
+  if (busy) return;
+  cellState = {};
+  portalState = Object.fromEntries(portals.map(p => [p.id, { owner: null, level: 0 }]));
+  links = [];
+  fields = [];
+  points = { A: RULES.startPoints, B: RULES.startPoints };
+  ['A', 'B'].forEach(t => { drones[t].pos = START[t].slice(); drones[t].marker.setLngLat(START[t]); });
+  cancelLink();
+  closeSheet();
+  refresh();
+  if (!silent) showToast('リセットしました');
+}
+
+function showRules() {
+  cancelLink();
+  const sheet = document.getElementById('sheet');
+  sheet.innerHTML = `
+    <div class="sheet-head"><span class="title">遊び方（仮ルール）</span><button class="btn close" onclick="closeSheet()">閉じる</button></div>
+    <ol class="rules">
+      <li>飛行ログを登録するとポイントがたまる（1分 = <b>${RULES.pointsPerMinute}pt</b>）</li>
+      <li>建物のポータルを占拠する（<b>${RULES.capturePortal}pt</b>）。強化でレベルが上がり、リンクが遠くまで届く（レベル × <b>${RULES.linkRangePerLevel}m</b>）</li>
+      <li>自分のポータル同士をリンクでつなぐ（<b>${RULES.linkCost}pt</b>）。ほかのリンクと交差するリンクは張れない</li>
+      <li>3つのポータルを三角形につなぐとコントロールフィールド。中のマスが自分の陣地になる（ボーナス <b>${RULES.fieldBonus}pt</b>）</li>
+      <li>相手のポータルを攻撃するとレベルが下がる（<b>${RULES.attackPortal}pt</b>）。0 になると中立になり、つながるリンクとフィールドが消える</li>
+      <li>自分の陣地のとなりのマスは個別にも取れる（<b>${RULES.claimCell}pt</b>、奪うのは <b>${RULES.stealCell}pt</b>）</li>
+    </ol>
+    <div class="sheet-meta">マスは空間ID（ズームレベル ${Z}、約31m 四方）。数値はすべて仮で、#4 で議論中です。</div>`;
+  sheet.hidden = false;
+  document.getElementById('toast').classList.add('lift');
+}
+
+function showBanner(team, title, sub) {
+  const b = document.getElementById('banner');
+  b.style.background = TEAM_COLOR[team];
+  b.innerHTML = '';
+  b.append(title);
+  const s = document.createElement('small');
+  s.textContent = sub;
+  b.appendChild(s);
+  b.classList.remove('show'); void b.offsetWidth; b.classList.add('show');
+}
+
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+</script>
+</body>
+</html>
