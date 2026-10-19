@@ -82,7 +82,7 @@ drone-territory/
 | ① MapLibre・陣取りマップ | MapLibre / Grid / Territory / チーム色表示 / 将来の3D Voxel | Tomoya ([@mapbytomoya](https://github.com/mapbytomoya)), Reara ([@rea2610](https://github.com/rea2610)) | `map` |
 | ② DJIログ・飛行時間データ | GPX / DJIログ / Parser / FlightRecord | Rito ([@0319-2004](https://github.com/0319-2004)), Kanoko ([@Kanoko4](https://github.com/Kanoko4)) | `flight-log` |
 | ③ UI・ゲームルール | ログアップロードUI / ゲーム画面 / ポイントルール / チームバランス | Aki ([@akidinosaurs](https://github.com/akidinosaurs)), Yuto ([@YutoKyoto](https://github.com/YutoKyoto)) | `ui-game` |
-| ④ GitHub・README・全体統合 | Repository / Issue / PR / Review / Merge / Supabase接続 / 引き継ぎ | Kosaku（GitHub ID 未登録）, Tomoya ([@mapbytomoya](https://github.com/mapbytomoya)) | `infra` |
+| ④ GitHub・README・全体統合 | Repository / Issue / PR / Review / Merge / Supabase接続 / 引き継ぎ | Kosaku ([@KousakuNakagawa](https://github.com/KousakuNakagawa)), Tomoya ([@mapbytomoya](https://github.com/mapbytomoya)) | `infra` |
 
 ## はじめての作業（Branch を切って PR を出すまで）
 
