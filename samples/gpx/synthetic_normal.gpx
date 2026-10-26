@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  合成データ（実際の飛行ログではありません）。
+  GPX Parser のテスト用に手で作ったもので、座標は 35.0N / 135.0E ちょうどを
+  起点にした明らかなダミー値です。実在の飛行経路・離陸地点ではありません。
+
+  期待値（worker/internal/gpx のテストで使用）:
+    duration_sec = 120
+    max_height_m = 30.0（最初の点の ele=100.0 を 0 とした相対高度の最大）
+    distance_m   ≒ 121.4（haversine の合計）
+-->
+<gpx version="1.1" creator="furuhashilab-drone-territory-sandbox (synthetic)"
+     xmlns="http://www.topografix.com/GPX/1/1">
+  <trk>
+    <name>synthetic_normal</name>
+    <trkseg>
+      <trkpt lat="35.0000000" lon="135.0000000"><ele>100.0</ele><time>2026-06-20T01:00:00Z</time></trkpt>
+      <trkpt lat="35.0000000" lon="135.0001000"><ele>105.0</ele><time>2026-06-20T01:00:10Z</time></trkpt>
+      <trkpt lat="35.0000000" lon="135.0002000"><ele>110.0</ele><time>2026-06-20T01:00:20Z</time></trkpt>
+      <trkpt lat="35.0000000" lon="135.0003000"><ele>115.0</ele><time>2026-06-20T01:00:30Z</time></trkpt>
+      <trkpt lat="35.0000000" lon="135.0004000"><ele>120.0</ele><time>2026-06-20T01:00:40Z</time></trkpt>
+      <trkpt lat="35.0000000" lon="135.0005000"><ele>125.0</ele><time>2026-06-20T01:00:50Z</time></trkpt>
+      <trkpt lat="35.0000000" lon="135.0006000"><ele>130.0</ele><time>2026-06-20T01:01:00Z</time></trkpt>
+      <trkpt lat="35.0001000" lon="135.0006000"><ele>128.0</ele><time>2026-06-20T01:01:10Z</time></trkpt>
+      <trkpt lat="35.0002000" lon="135.0006000"><ele>126.0</ele><time>2026-06-20T01:01:20Z</time></trkpt>
+      <trkpt lat="35.0003000" lon="135.0006000"><ele>124.0</ele><time>2026-06-20T01:01:30Z</time></trkpt>
+      <trkpt lat="35.0004000" lon="135.0006000"><ele>122.0</ele><time>2026-06-20T01:01:40Z</time></trkpt>
+      <trkpt lat="35.0005000" lon="135.0006000"><ele>120.0</ele><time>2026-06-20T01:01:50Z</time></trkpt>
+      <trkpt lat="35.0006000" lon="135.0006000"><ele>118.0</ele><time>2026-06-20T01:02:00Z</time></trkpt>
+    </trkseg>
+  </trk>
+</gpx>

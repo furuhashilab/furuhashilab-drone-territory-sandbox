@@ -1,0 +1,18 @@
+{
+  "log_version": 14,
+  "parser": "pydjirecord 1.3.0",
+  "source_sha256": "ac4abb94812e980e9647e08e10570e2b79b89db8d84df101cb84451211a3dffc",
+  "app_name": "DJI_FLY",
+  "app_version": "1.21.2",
+  "aircraft_name": "DJI Neo",
+  "product_type": "UNKNOWN_182",
+  "start_time_utc": "2026-06-20T23:51:37.922Z",
+  "duration_sec": 241.0,
+  "distance_m": 103.23981940746307,
+  "max_height_m": 5.0,
+  "max_horizontal_speed_mps": 1.1045360565185547,
+  "max_vertical_speed_mps": 0.5,
+  "video_time_sec": 1552,
+  "record_count": 1894,
+  "notes": "概要部分のみ。経路は API キーで復号が必要。機種コードはパーサー未対応（UNKNOWN_182）。小数は djirecord の出力をそのまま記載（テストの正解データとして使うため）。video_time_sec は飛行時間より長い値が出ており、FlightRecord では使わない。"
+}
