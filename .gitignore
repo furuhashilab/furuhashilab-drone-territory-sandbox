@@ -10,6 +10,9 @@
 node_modules/
 dist/
 
+# Go のビルド成果物
+worker/flightparse
+
 # ドローンの生ログ（機体シリアル番号・離陸地点の座標を含むため公開しない）
 samples/private/
 FlightRecord_*.txt
