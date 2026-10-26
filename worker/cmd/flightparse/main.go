@@ -41,15 +41,8 @@ func run(args []string) error {
 	}
 
 
-// TODO: GPX かどうかの判定をもう少し厳密にする。
-// 今は「先頭の空白と BOM を飛ばした最初の 1 文字が '<' か」だけを見ている。
-// DJI ログの先頭 8 バイトは記録の位置を表す数値なので、先頭バイトが
-// たまたま 0x3C（'<'）だと GPX と誤判定され、XML の読み込みエラーになる。
-// 修正案: '<' の後まで見て、"<?xml" か "<gpx" で始まるかを確かめる。
-//   例: bytes.HasPrefix(rest, []byte("<?xml")) || bytes.HasPrefix(rest, []byte("<gpx"))
-// 起きる確率はとても低いので、MVP では後回しにする。
+
 // looksLikeXML は中身が XML（＝ GPX）かどうかを、先頭の空白と BOM を飛ばして判定する。
-func looksLikeXML(data []byte) bool {
 	// 形式はファイル名ではなく中身で判定する。拡張子は当てにならないため
 	// （DJI のログは .txt だが中身はバイナリ）。
 	var rec *flightrecord.Record
@@ -71,7 +64,14 @@ func looksLikeXML(data []byte) bool {
 	return nil
 }
 
-// looksLikeXML は中身が XML（＝ GPX）かどうかを、先頭の空白と BOM を飛ばして判定する。
+// TODO: GPX かどうかの判定をもう少し厳密にする。
+// 今は「先頭の空白と BOM を飛ばした最初の 1 文字が '<' か」だけを見ている。
+// DJI ログの先頭 8 バイトは記録の位置を表す数値なので、先頭バイトが
+// たまたま 0x3C（'<'）だと GPX と誤判定され、XML の読み込みエラーになる。
+// 修正案: '<' の後まで見て、"<?xml" か "<gpx" で始まるかを確かめる。
+//   例: bytes.HasPrefix(rest, []byte("<?xml")) || bytes.HasPrefix(rest, []byte("<gpx"))
+// 起きる確率はとても低いので、MVP では後回しにする。
+//looksLikeXML は中身が XML（＝ GPX）かどうかを、先頭の空白と BOM を飛ばして判定する。
 func looksLikeXML(data []byte) bool {
 	data = trimBOM(data)
 	for i, b := range data {
