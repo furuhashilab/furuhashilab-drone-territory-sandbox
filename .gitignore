@@ -9,3 +9,8 @@
 # 依存関係・ビルド成果物（技術スタック決定後に追記）
 node_modules/
 dist/
+
+# ドローンの生ログ（機体シリアル番号・離陸地点の座標を含むため公開しない）
+samples/private/
+FlightRecord_*.txt
+DJIFlightRecord_*.txt
