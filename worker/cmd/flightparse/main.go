@@ -49,7 +49,6 @@ func run(args []string) error {
 //   例: bytes.HasPrefix(rest, []byte("<?xml")) || bytes.HasPrefix(rest, []byte("<gpx"))
 // 起きる確率はとても低いので、MVP では後回しにする。
 // looksLikeXML は中身が XML（＝ GPX）かどうかを、先頭の空白と BOM を飛ばして判定する。
-func looksLikeXML(data []byte) bool {
 	// 形式はファイル名ではなく中身で判定する。拡張子は当てにならないため
 	// （DJI のログは .txt だが中身はバイナリ）。
 	var rec *flightrecord.Record
