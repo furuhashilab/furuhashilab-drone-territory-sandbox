@@ -381,6 +381,12 @@
   <div id="map"><div class="banner" id="banner"></div></div>
 </div>
 <div class="toast" id="toast"></div>
+<dialog id="reset-dialog" aria-labelledby="reset-title" aria-describedby="reset-description">
+  <h2 id="reset-title">共有盤面をリセット</h2>
+  <p id="reset-description">全員の飛行ログと陣取りの記録を消して、最初からやり直します。</p>
+  <button type="button" onclick="resetDialog.close()" autofocus>キャンセル</button>
+  <button type="button" onclick="resetDialog.close('reset')">リセットする</button>
+</dialog>
 <div class="ul-backdrop" id="upload" hidden onclick="if (event.target === this) closeUpload()">
   <div class="ul" id="ul" role="dialog" aria-modal="true" aria-label="飛行ログを登録"></div>
 </div>
@@ -760,8 +766,8 @@ function setBase(name) {
 }
 
 function resetGame(silent) {
+  if (Shared.on && !silent) return openSharedReset();
   if (flying) return;
-  if (Shared.on && !silent) return sharedReset();
   cellState = {};
   points = { A: RULES.startPoints, B: RULES.startPoints };
   if (typeof flightLogs !== 'undefined') flightLogs = [];
@@ -1429,15 +1435,38 @@ async function renderMembers() {
   } finally { membersBusy = false; }
 }
 
-// リセット（共有モードではオーナーだけ。記録をすべて消す）
-async function sharedReset() {
+const resetDialog = document.getElementById('reset-dialog');
+resetDialog.addEventListener('close', () => {
+  if (resetDialog.returnValue === 'reset') sharedReset();
+});
+let resetting = false;
+
+function openSharedReset() {
   if (!Shared.owner) return showToast('共有中の盤面のリセットはオーナーだけができます');
-  if (!confirm('全員の飛行ログと陣取りの記録を消して、最初からやり直します。よろしいですか？')) return;
+  if (!Shared.initialized) return showToast('共有データに接続してからリセットしてください');
+  if (resetting || resetDialog.open) return;
+  resetDialog.returnValue = '';
+  resetDialog.showModal();
+}
+
+// 参加者のチームは保持し、飛行ログと陣取りの操作記録を削除する。
+async function sharedReset() {
+  if (!Shared.owner || !Shared.initialized || resetting) return;
+  resetting = true;
+  const logIds = Shared.logs.map(l => l.id);
+  const moveIds = Shared.moves.map(m => m.id);
   try {
-    for (const l of Shared.logs) await Shared.db.doc('logs/' + l.id).delete();
-    for (const m of Shared.moves) await Shared.db.doc('moves/' + m.id).delete();
+    for (const id of logIds) await Shared.db.doc('logs/' + id).delete();
+    for (const id of moveIds) await Shared.db.doc('moves/' + id).delete();
+    Shared.seenLogs.clear();
+    Shared.seenMoves.clear();
+    Shared.pending.clear();
     showToast('リセットしました');
-  } catch (e) { showToast(writeError(e)); }
+  } catch (e) {
+    showToast('リセットを完了できませんでした。' + writeError(e));
+  } finally {
+    resetting = false;
+  }
 }
 
 </script>
