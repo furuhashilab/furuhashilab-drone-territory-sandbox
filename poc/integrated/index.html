@@ -584,7 +584,11 @@ function droneSvg(color) {
 // ---------------------------------------------------------------
 function neighbors(key) {
   const [r, c] = rcOf(key);
-  return [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]].map(([a, b]) => keyOf(a, b)).filter(k => k in cellRoom);
+  return [
+    [r - 1, c - 1], [r - 1, c], [r - 1, c + 1],
+    [r, c - 1], [r, c + 1],
+    [r + 1, c - 1], [r + 1, c], [r + 1, c + 1],
+  ].map(([row, column]) => keyOf(row, column)).filter(k => k in cellRoom);
 }
 function isBase(key) { return BASES.A.includes(key) || BASES.B.includes(key); }
 function costOf(team, key) {
@@ -622,7 +626,7 @@ map.on('click', 'cells-fill', e => {
   const cost = costOf(currentTeam, key);
   if (isBase(key)) return showToast('基地は奪えません');
   if (cellState[key] === currentTeam) return showToast(`${room.label} — すでに Team ${currentTeam} の陣地`);
-  if (cost === null) return showToast('自分の陣地のとなりのマスだけ取れます');
+  if (cost === null) return showToast('自分の陣地に接するマスだけ取れます（斜めも可）');
   if (cost > points[currentTeam]) return showToast(`ポイントが足りません（${cost}pt 必要）— 飛行ログを登録しよう`);
 
   const team = currentTeam;
